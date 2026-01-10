@@ -31,19 +31,10 @@ class ReferenceLoader:
         self.encode_reference: Callable
 
         # Define the torchaudio backend
-        # Note: list_audio_backends() was removed in torchaudio 2.1.0+
-        # Try to use ffmpeg backend first, fallback to soundfile
-        try:
-            torchaudio.set_audio_backend("ffmpeg")
-            self.backend = "ffmpeg"
-        except (RuntimeError, ValueError):
-            try:
-                torchaudio.set_audio_backend("soundfile")
-                self.backend = "soundfile"
-            except (RuntimeError, ValueError):
-                # If both fail, default to soundfile
-                self.backend = "soundfile"
-                logger.warning("Could not set audio backend, using default: soundfile")
+        # Note: In torchaudio 2.1.0+, backend management APIs were removed
+        # The backend is now automatically selected based on available dependencies
+        # We keep this attribute for compatibility but it's no longer used in torchaudio.load()
+        self.backend = None  # Auto-detect backend
 
     def load_by_id(
         self,
@@ -122,7 +113,7 @@ class ReferenceLoader:
             audio_data = reference_audio
             reference_audio = io.BytesIO(audio_data)
 
-        waveform, original_sr = torchaudio.load(reference_audio, backend=self.backend)
+        waveform, original_sr = torchaudio.load(reference_audio)
 
         if waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
