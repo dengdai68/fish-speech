@@ -3,6 +3,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Callable, Literal, Tuple
 
+import soundfile as sf
 import torch
 import torchaudio
 from loguru import logger
@@ -113,11 +114,24 @@ class ReferenceLoader:
             audio_data = reference_audio
             reference_audio = io.BytesIO(audio_data)
 
-        waveform, original_sr = torchaudio.load(reference_audio)
+        # Use soundfile directly to avoid torchaudio backend issues
+        # soundfile returns (data, samplerate) where data is numpy array
+        audio_data, original_sr = sf.read(reference_audio, dtype='float32')
 
+        # Convert to torch tensor and ensure correct shape [channels, samples]
+        waveform = torch.from_numpy(audio_data)
+        if waveform.ndim == 1:
+            # Mono audio: add channel dimension
+            waveform = waveform.unsqueeze(0)
+        else:
+            # Stereo/multi-channel: transpose to [channels, samples]
+            waveform = waveform.T
+
+        # Convert stereo to mono if needed
         if waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
 
+        # Resample if needed
         if original_sr != sr:
             resampler = torchaudio.transforms.Resample(
                 orig_freq=original_sr, new_freq=sr
